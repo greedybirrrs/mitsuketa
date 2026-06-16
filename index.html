@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>みつけた！</title>
+  <style>
+    :root {
+      --sky:    #FFF9F0;
+      --yellow: #FFD94A;
+      --orange: #FF7A3C;
+      --green:  #5DC46B;
+      --blue:   #4FA8E8;
+      --pink:   #FF6EB4;
+      --text:   #2D2D2D;
+      --muted:  #888;
+      --radius: 32px;
+      --font:   'Hiragino Maru Gothic ProN', 'BIZ UDRounded', 'Rounded Mplus 1c', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background: var(--sky);
+      color: var(--text);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      touch-action: manipulation;
+    }
+
+    /* ── 画面 ── */
+    .screen { display: none; flex-direction: column; align-items: center; justify-content: center;
+              width: 100%; min-height: 100dvh; padding: 1.2rem 1rem; text-align: center; gap: 1rem; }
+    .screen.active { display: flex; }
+
+    /* ── タイトル ── */
+    #screen-title .logo { font-size: clamp(3rem,14vw,6rem); font-weight:900; color:var(--orange);
+                          animation: bounce-in .6s cubic-bezier(.36,1.56,.64,1) both; }
+    #screen-title .logo span { color: var(--yellow); }
+    #screen-title .sub { font-size: clamp(1rem,4vw,1.3rem); color: var(--muted); font-weight:600; }
+    .magnify { font-size: clamp(5rem,20vw,8rem); animation: float 3s ease-in-out infinite; user-select:none; }
+
+    /* ── ボタン ── */
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:.4rem;
+           padding:.9rem 2rem; border:none; border-radius:var(--radius); font-family:var(--font);
+           font-size:clamp(1.1rem,5vw,1.6rem); font-weight:900; cursor:pointer;
+           transition: transform .12s, box-shadow .12s; box-shadow:0 6px 0 rgba(0,0,0,.15);
+           -webkit-tap-highlight-color:transparent; }
+    .btn:active { transform: scale(.94) translateY(3px); box-shadow:0 3px 0 rgba(0,0,0,.15); }
+    .btn-start { background:var(--orange); color:#fff; width:min(300px,85vw); }
+    .btn-next  { background:var(--green);  color:#fff; width:min(260px,75vw); }
+
+    /* ── ゲーム画面 ── */
+    #screen-game { justify-content: flex-start; padding-top: 0; gap: 0; }
+
+    /* お題バー */
+    .odai-bar {
+      width: 100%; background: var(--orange); color: #fff;
+      display: flex; align-items: center; justify-content: center; gap: .6rem;
+      padding: .7rem 1rem; flex-shrink: 0;
+    }
+    .odai-bar .label { font-size: clamp(.85rem,3.5vw,1.1rem); font-weight:700; opacity:.85; }
+    .odai-bar .target { font-size: clamp(1.4rem,6vw,2rem); font-weight:900; }
+    .odai-bar .target-emoji { font-size: clamp(1.6rem,7vw,2.4rem); }
+
+    /* シーン */
+    .scene-wrap {
+      flex: 1; width: 100%; position: relative; overflow: hidden;
+      cursor: crosshair;
+    }
+    .scene-bg {
+      width: 100%; height: 100%; position: absolute; inset: 0;
+      display: flex; flex-wrap: wrap; align-content: flex-start;
+      padding: .4rem;
+      gap: 0;
+      overflow: hidden;
+    }
+
+    /* アイテム（絵文字スプライト） */
+    .item {
+      position: absolute;
+      font-size: 2rem;
+      line-height: 1;
+      user-select: none;
+      transition: transform .1s;
+      cursor: pointer;
+    }
+    .item:active { transform: scale(1.3); }
+    .item.target-item { z-index: 10; }
+
+    /* ヒットリング */
+    .hit-ring {
+      position: absolute; border: 4px solid var(--yellow);
+      border-radius: 50%; pointer-events: none; z-index: 20;
+      animation: ring-out .6s ease-out forwards;
+    }
+    @keyframes ring-out {
+      0%   { transform: scale(0.5); opacity: 1; }
+      100% { transform: scale(2.5); opacity: 0; }
+    }
+
+    /* ミスフラッシュ */
+    .miss-flash {
+      position: absolute; inset:0; background: rgba(255,80,80,.25);
+      pointer-events: none; z-index: 30;
+      animation: flash-out .4s ease-out forwards;
+    }
+    @keyframes flash-out { to { opacity:0; } }
+
+    /* 進捗 */
+    .progress-bar {
+      width: 100%; background: #eee; height: 8px; flex-shrink: 0;
+    }
+    .progress-fill {
+      height: 100%; background: var(--green);
+      transition: width .4s ease;
+    }
+
+    /* ── 正解画面 ── */
+    #screen-success { background: linear-gradient(160deg,#FFF9A0 0%,#FFDFA0 100%); }
+    #screen-success .congrats { font-size:clamp(2rem,10vw,4rem); font-weight:900; color:var(--orange);
+                                animation: pop .5s cubic-bezier(.36,1.56,.64,1) both; }
+    #screen-success .phrase   { font-size:clamp(1.1rem,4.5vw,1.8rem); font-weight:700; }
+    #screen-success .found-emoji { font-size: clamp(4rem,16vw,7rem); }
+
+    /* ── ゴール画面 ── */
+    #screen-end .medal { font-size:clamp(4rem,18vw,8rem); }
+    #screen-end .title { font-size:clamp(1.8rem,9vw,3.5rem); font-weight:900; color:var(--orange); }
+    #screen-end .sub   { font-size:clamp(.95rem,4vw,1.4rem); color:var(--muted); font-weight:600; }
+
+    /* ── スター ── */
+    .stars-wrap { position:fixed; inset:0; pointer-events:none; z-index:100; }
+    .star { position:absolute; font-size:2rem; animation: star-fly 1s ease-out forwards; }
+
+    /* ── キーフレーム ── */
+    @keyframes bounce-in { from{transform:scale(.6);opacity:0} to{transform:scale(1);opacity:1} }
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-12px)} }
+    @keyframes pop   { from{transform:scale(.5);opacity:0} to{transform:scale(1);opacity:1} }
+    @keyframes star-fly {
+      0%   { transform:translate(0,0) scale(1); opacity:1; }
+      100% { transform:translate(var(--dx),var(--dy)) scale(0); opacity:0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- タイトル -->
+<section class="screen active" id="screen-title">
+  <div class="magnify">🔍</div>
+  <div class="logo">みつけた<span>！</span></div>
+  <div class="sub">えのなかから　みつけてね</div>
+  <button class="btn btn-start" id="btn-start">はじめる ▶</button>
+</section>
+
+<!-- ゲーム -->
+<section class="screen" id="screen-game">
+  <div class="odai-bar">
+    <span class="label">みつけてね→</span>
+    <span class="target-emoji" id="odai-emoji"></span>
+    <span class="target" id="odai-text"></span>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+  <div class="scene-wrap" id="scene-wrap"></div>
+</section>
+
+<!-- 正解 -->
+<section class="screen" id="screen-success">
+  <div class="found-emoji" id="success-emoji"></div>
+  <div class="congrats" id="success-congrats"></div>
+  <div class="phrase"   id="success-phrase"></div>
+  <button class="btn btn-next" id="btn-next">つぎを　みつけよう ➡</button>
+</section>
+
+<!-- ゴール -->
+<section class="screen" id="screen-end">
+  <div class="medal">🏅</div>
+  <div class="title">ぜんぶ　みつけた！</div>
+  <div class="sub">すごい！　よくできたね！</div>
+  <button class="btn btn-start" id="btn-again" style="background:var(--blue)">もういちど ↺</button>
+</section>
+
+<div class="stars-wrap" id="stars-wrap"></div>
+
+<script>
+/* ━━━━━━━━━  データ  ━━━━━━━━━ */
+const ODAI = [
+  { emoji:'🐶', text:'わんわん' },
+  { emoji:'🐱', text:'にゃんにゃん' },
+  { emoji:'🍎', text:'りんご' },
+  { emoji:'⚽', text:'ボール' },
+  { emoji:'🌸', text:'おはな' },
+  { emoji:'🍃', text:'はっぱ' },
+  { emoji:'📚', text:'ほん' },
+  { emoji:'🐻', text:'ぬいぐるみ' },
+];
+
+/* シーン別の背景アイテム */
+const SCENES = [
+  {
+    name:'おうち', bg:'#FFF0DC',
+    fillers:['🛋️','🪴','🖼️','🕯️','📺','🪑','☕','🧸','🎨','🧺','🪞','🪟','🎀','🧩',
+             '🎪','🏮','🪣','🧁','🍵','📷','🎭','🧶','🗝️','📦'],
+  },
+  {
+    name:'こうえん', bg:'#E8F7DC',
+    fillers:['🌳','🌲','🌻','🦋','🐝','🍄','🌈','☁️','⛲','🐦','🌿','🍀','🌾','🌵',
+             '🦜','🐸','🌝','🎠','⛺','🛤️','🦔','🌺','🍁','🐞'],
+  },
+  {
+    name:'うみ', bg:'#DCF0FF',
+    fillers:['🐠','🐙','🦀','🐚','🌊','⚓','🦈','🐬','🐋','🦑','🌴','⛵','🏄','🪸',
+             '🦞','🐡','🦭','🌅','🏝️','🐟','🧜','🦐','🪼','💧'],
+  },
+  {
+    name:'どうぶつえん', bg:'#FFF0E8',
+    fillers:['🦁','🐘','🦒','🦓','🦏','🐆','🦧','🦩','🐊','🐢','🦎','🐍','🦅','🦚',
+             '🐒','🐻','🦙','🦘','🐨','🐼','🦛','🐮','🐷','🐰'],
+  },
+];
+
+const PRAISE = ['すごい！みつけたね！','やったー！じょうず！','さすが！よくみてるね！',
+                'えらい！みつけたね！','わあ！はやかったね！'];
+
+/* ━━━━━━━━━  状態  ━━━━━━━━━ */
+let shuffledOdai = [];
+let currentIdx   = 0;
+let canTap       = false;
+
+/* ━━━━━━━━━  ユーティリティ  ━━━━━━━━━ */
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function rand(min, max) { return Math.random() * (max - min) + min; }
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP'; u.rate = 0.85; u.pitch = 1.2;
+  window.speechSynthesis.speak(u);
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+const STAR_CHARS = ['⭐','🌟','✨','💛','🎊','🎉'];
+function burstStars(x, y) {
+  const wrap = document.getElementById('stars-wrap');
+  for (let i = 0; i < 20; i++) {
+    const el = document.createElement('span');
+    el.className = 'star';
+    el.textContent = STAR_CHARS[Math.floor(Math.random() * STAR_CHARS.length)];
+    const angle = (Math.PI * 2 * i) / 20 + (Math.random() - 0.5) * 0.5;
+    const dist  = 100 + Math.random() * 180;
+    el.style.left = x + 'px';
+    el.style.top  = y + 'px';
+    el.style.setProperty('--dx', Math.cos(angle) * dist + 'px');
+    el.style.setProperty('--dy', Math.sin(angle) * dist + 'px');
+    el.style.animationDelay = Math.random() * 0.15 + 's';
+    wrap.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
+  }
+}
+
+/* ━━━━━━━━━  シーン生成  ━━━━━━━━━ */
+function buildScene(odai) {
+  const wrap = document.getElementById('scene-wrap');
+  wrap.innerHTML = '';
+
+  const scene = SCENES[Math.floor(Math.random() * SCENES.length)];
+  wrap.style.background = scene.bg;
+
+  const W = wrap.clientWidth  || window.innerWidth;
+  const H = wrap.clientHeight || (window.innerHeight - 120);
+
+  /* フィラーアイテム数（密度） */
+  const COUNT = Math.floor((W * H) / 6000);  /* 画面サイズに応じて */
+
+  const FSIZE_MIN = 28, FSIZE_MAX = 52;
+  const MARGIN = 12;
+
+  /* ターゲットを必ず1個配置 */
+  const targetEl = document.createElement('div');
+  targetEl.className = 'item target-item';
+  targetEl.textContent = odai.emoji;
+  const tSize = Math.floor(rand(FSIZE_MIN, FSIZE_MAX));
+  targetEl.style.fontSize = tSize + 'px';
+
+  /* ターゲット位置（端を避ける）*/
+  const tx = rand(MARGIN, W - tSize - MARGIN);
+  const ty = rand(MARGIN, H - tSize - MARGIN);
+  targetEl.style.left = tx + 'px';
+  targetEl.style.top  = ty + 'px';
+
+  targetEl.dataset.isTarget = '1';
+  wrap.appendChild(targetEl);
+
+  /* フィラーをランダム配置（ターゲットと被らないよう簡易チェック）*/
+  const fillers = shuffle(
+    scene.fillers.filter(f => f !== odai.emoji)
+  );
+
+  let placed = 0;
+  let attempts = 0;
+  while (placed < COUNT && attempts < COUNT * 8) {
+    attempts++;
+    const emoji = fillers[placed % fillers.length];
+    const fSize = Math.floor(rand(FSIZE_MIN, FSIZE_MAX));
+    const fx = rand(MARGIN, W - fSize - MARGIN);
+    const fy = rand(MARGIN, H - fSize - MARGIN);
+
+    /* ターゲットとの距離チェック */
+    const dist = Math.hypot(fx - tx, fy - ty);
+    if (dist < tSize + fSize + 8) { continue; }
+
+    const el = document.createElement('div');
+    el.className = 'item';
+    el.textContent = emoji;
+    el.style.fontSize = fSize + 'px';
+    el.style.left = fx + 'px';
+    el.style.top  = fy + 'px';
+
+    wrap.appendChild(el);
+    placed++;
+  }
+
+  /* タップ処理 */
+  canTap = true;
+
+  wrap.addEventListener('pointerdown', onSceneTap, { passive: true });
+}
+
+/* ━━━━━━━━━  タップ処理  ━━━━━━━━━ */
+function onSceneTap(e) {
+  if (!canTap) return;
+
+  /* ターゲット自体か判定 */
+  let el = e.target;
+  const isTarget = el.dataset && el.dataset.isTarget === '1';
+
+  if (isTarget) {
+    canTap = false;
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width  / 2;
+    const cy = rect.top  + rect.height / 2;
+
+    /* ヒットリング */
+    const ring = document.createElement('div');
+    ring.className = 'hit-ring';
+    ring.style.width  = el.offsetWidth  + 'px';
+    ring.style.height = el.offsetHeight + 'px';
+    ring.style.left   = el.offsetLeft + 'px';
+    ring.style.top    = el.offsetTop  + 'px';
+    document.getElementById('scene-wrap').appendChild(ring);
+
+    burstStars(cx, cy);
+    speak('みつけた！　' + PRAISE[Math.floor(Math.random() * PRAISE.length)]);
+
+    document.getElementById('scene-wrap').removeEventListener('pointerdown', onSceneTap);
+
+    setTimeout(() => showSuccess(), 700);
+  } else {
+    /* ミス */
+    const wrap = document.getElementById('scene-wrap');
+    const flash = document.createElement('div');
+    flash.className = 'miss-flash';
+    wrap.appendChild(flash);
+    flash.addEventListener('animationend', () => flash.remove());
+  }
+}
+
+/* ━━━━━━━━━  正解画面  ━━━━━━━━━ */
+function showSuccess() {
+  const odai = shuffledOdai[currentIdx];
+  const praise = PRAISE[Math.floor(Math.random() * PRAISE.length)];
+  document.getElementById('success-emoji').textContent   = odai.emoji;
+  document.getElementById('success-congrats').textContent = 'みつけた！';
+  document.getElementById('success-phrase').textContent   = praise;
+  showScreen('screen-success');
+  updateProgress();
+}
+
+function updateProgress() {
+  const pct = ((currentIdx + 1) / shuffledOdai.length) * 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+}
+
+/* ━━━━━━━━━  ゲームフロー  ━━━━━━━━━ */
+function startGame() {
+  shuffledOdai = shuffle(ODAI);
+  currentIdx   = 0;
+  document.getElementById('progress-fill').style.width = '0%';
+  loadRound();
+}
+
+function loadRound() {
+  const odai = shuffledOdai[currentIdx];
+  document.getElementById('odai-emoji').textContent = odai.emoji;
+  document.getElementById('odai-text').textContent  = odai.text;
+  showScreen('screen-game');
+
+  /* シーンはレイアウト確定後に生成 */
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      buildScene(odai);
+      speak(odai.text + '　どこかな〜？');
+    });
+  });
+}
+
+function onNext() {
+  currentIdx++;
+  if (currentIdx >= shuffledOdai.length) {
+    speak('ぜんぶ　みつけた！　すごい！');
+    showScreen('screen-end');
+  } else {
+    loadRound();
+  }
+}
+
+/* ━━━━━━━━━  イベント  ━━━━━━━━━ */
+document.getElementById('btn-start').addEventListener('click', () => {
+  const u = new SpeechSynthesisUtterance('');
+  window.speechSynthesis.speak(u);
+  startGame();
+});
+document.getElementById('btn-again').addEventListener('click', startGame);
+document.getElementById('btn-next').addEventListener('click', onNext);
+
+/* リサイズ時に再生成 */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (document.getElementById('screen-game').classList.contains('active') && canTap) {
+      buildScene(shuffledOdai[currentIdx]);
+    }
+  }, 300);
+});
+</script>
+</body>
+</html>
